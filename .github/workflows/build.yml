@@ -21,10 +21,16 @@ jobs:
           unzip -q gradle-8.9-bin.zip -d /opt
           echo "/opt/gradle-8.9/bin" >> $GITHUB_PATH
 
-      - name: Build release APK
+      - name: Build both APKs
         run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Collect
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/*.apk out/TubeHQ.apk
+          cp shot/build/outputs/apk/release/*.apk out/TubeShot.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: TubeHQApp-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: out/*.apk

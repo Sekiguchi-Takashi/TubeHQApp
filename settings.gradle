@@ -7,3 +7,4 @@ pluginManagement {
 }
 rootProject.name = "TubeHQApp"
 include ':app'
+include ':shot'
