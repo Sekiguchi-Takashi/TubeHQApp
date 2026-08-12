@@ -62,6 +62,43 @@ object Screens {
         }.start()
     }
 
+    /**
+     * 受け渡し先フォルダの案内。未設定だと Cut との受け渡しが動かないので、
+     * ホームの最上部に常設する。
+     */
+    fun folderCard(act: MainActivity): View {
+        val card = Ui.card(act)
+        val set = Bridge.treeUri(act) != null
+
+        val t = TextView(act)
+        t.textSize = 16f
+        t.typeface = Typeface.DEFAULT_BOLD
+        t.setTextColor(if (set) Ui.ACC else Color.parseColor("#C94A3A"))
+        t.text = if (set) "受け渡し先フォルダ" else "受け渡し先フォルダが未設定です"
+        card.addView(t)
+
+        val d = TextView(act)
+        d.setTextColor(Ui.SUB)
+        d.textSize = 13f
+        d.text = if (set) {
+            Bridge.treePath(act) ?: "設定済み"
+        } else {
+            "TubeCut との台本・結果の受け渡しに使います。\n" +
+                "内部ストレージに空フォルダを1つ作って選んでください（例: Download/tube）\n" +
+                "※TubeCut 側でも同じフォルダを選ぶこと"
+        }
+        card.addView(d)
+
+        card.addView(Ui.button(act, if (set) "フォルダを変更" else "フォルダを選ぶ", !set) {
+            act.pickTree { uri ->
+                Bridge.setTree(act, uri)
+                act.toast("受け渡し先を設定しました")
+                act.refresh()
+            }
+        })
+        return card
+    }
+
     fun empty(act: MainActivity, msg: String): View {
         val c = Ui.col(act, 18)
         c.addView(Ui.title(act, "作品が選ばれていません"))
@@ -508,6 +545,15 @@ object Screens {
 
         if (p.outputUri.isNotBlank()) {
             c.addView(Ui.label(act, "完成ファイルあり（Cutから受領）", true))
+            val orow = Ui.row(act)
+            orow.addView(Ui.button(act, "完成ファイルを開く", true) { act.openOutput(p) })
+            orow.addView(Ui.button(act, "リンクをコピー") { act.copy(p.outputUri, "完成ファイルの場所") })
+            c.addView(Ui.scrollH(act, orow))
+            if (p.hasReal()) {
+                c.addView(Ui.label(act, "実尺 ${Ui.mmss(p.realTotal)}", true))
+            }
+        } else {
+            c.addView(Ui.label(act, "完成ファイルは未受領です（Cutで書き出して「Deskへ結果を返す」）", true))
         }
 
         c.addView(Ui.label(act, "数字（手入力）", true))

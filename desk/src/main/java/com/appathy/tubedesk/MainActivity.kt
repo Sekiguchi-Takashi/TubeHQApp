@@ -169,6 +169,7 @@ class MainActivity : Activity() {
 
     private fun homeScreen(): View {
         val c = Ui.col(this, 14)
+        if (Bridge.treeUri(this) == null) c.addView(Screens.folderCard(this))
         val list = store.sorted()
         val next = list.firstOrNull { it.status != Project.S_DONE }
 
@@ -213,10 +214,29 @@ class MainActivity : Activity() {
         tools.addView(Ui.button(this, "バックアップ") { exportBackup() })
         tools.addView(Ui.button(this, "読み込み") { importBackup() })
         tools.addView(Ui.button(this, "受け渡し先") { Bridge.chooseFolder(this) })
+        tools.addView(Ui.button(this, "設定を確認") { showSettings() })
         tools.addView(Ui.button(this, "AI接続先") { askHost() })
+        tools.addView(Ui.button(this, "Cutの結果を取り込む") { Bridge.pullResults(this, true) })
         c.addView(Ui.scrollH(this, tools))
         c.addView(Ui.spacer(this, 40))
         return Ui.scroll(this, c)
+    }
+
+    private fun showSettings() {
+        val path = Bridge.treePath(this)
+        val msg = buildString {
+            append("受け渡し先: ")
+            append(if (Bridge.treeUri(this@MainActivity) == null) "未設定" else (path ?: "設定済み（実パス不明）"))
+            append("\n\nAI接続先: ")
+            append(Bonsai.host(this@MainActivity))
+            append("\n\n作品数: ")
+            append(store.projects.size)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("設定")
+            .setMessage(msg)
+            .setPositiveButton("閉じる", null)
+            .show()
     }
 
     private fun askHost() {
@@ -234,6 +254,22 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("やめる", null)
             .show()
+    }
+
+    /** Cut が書き出した完成ファイルを外部プレイヤーで開く */
+    fun openOutput(p: Project) {
+        if (p.outputUri.isBlank()) {
+            toast("完成ファイルがありません")
+            return
+        }
+        try {
+            val i = Intent(Intent.ACTION_VIEW)
+            i.setDataAndType(Uri.parse(p.outputUri), "video/*")
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            startActivity(i)
+        } catch (e: Throwable) {
+            toast("開けるアプリがありません")
+        }
     }
 
     fun advance(p: Project) {

@@ -59,6 +59,44 @@ object Screens {
         }.start()
     }
 
+    /**
+     * 受け渡し先フォルダの案内。未設定だと Desk 連携も重いレーンも一切動かないので、
+     * 素材タブと出力タブの最上部に常設する。以前は作品一覧にしか置いておらず、
+     * 編集を開くと選択手段が画面から消えていた。
+     */
+    fun folderCard(act: MainActivity): View {
+        val card = Ui.card(act)
+        val path = Bridge.treePath(act)
+        val set = Bridge.treeUri(act) != null
+
+        val t = TextView(act)
+        t.textSize = 16f
+        t.typeface = Typeface.DEFAULT_BOLD
+        t.setTextColor(if (set) Ui.ACC else Ui.WARN)
+        t.text = if (set) "受け渡し先フォルダ" else "受け渡し先フォルダが未設定です"
+        card.addView(t)
+
+        val d = TextView(act)
+        d.setTextColor(Ui.SUB)
+        d.textSize = 13f
+        d.text = if (set) {
+            path ?: "内部ストレージ以外のため実パスを特定できません。Termuxから読めない可能性があります"
+        } else {
+            "Deskとの受け渡しと、ffmpegに渡す素材の置き場所になります。\n" +
+                "内部ストレージに空フォルダを1つ作って選んでください（例: Download/tube）"
+        }
+        card.addView(d)
+
+        card.addView(Ui.button(act, if (set) "フォルダを変更" else "フォルダを選ぶ", !set) {
+            act.pickTree { uri ->
+                Bridge.setTree(act, uri)
+                act.toast("受け渡し先を設定しました")
+                act.refresh()
+            }
+        })
+        return card
+    }
+
     private fun empty(act: MainActivity, msg: String): View {
         val c = Ui.col(act, 18)
         c.addView(Ui.title(act, "編集が選ばれていません"))
@@ -225,6 +263,17 @@ object Screens {
         head.text = "${p.segments.size}区間 / 採用${p.used().size} / ${Fmt.ms(p.usedMs())}"
         c.addView(head)
 
+        val scanNote = Ui.label(act, "", true)
+        c.addView(scanNote)
+        val needScan = p.sources.any { it.probed == 1 && !act.keyCache.containsKey(it.uri) }
+        if (needScan) {
+            scanNote.text = "キーフレームを走査しています…（ズレの表示はその後で出ます）"
+            act.scanKeyframes(p.sources) {
+                scanNote.text = ""
+                act.refresh()
+            }
+        }
+
         val tools = Ui.row(act)
         tools.addView(Ui.button(act, "無音を全て外す") {
             for (s in p.segments) if (s.silent == 1) s.use = 0
@@ -303,7 +352,11 @@ object Screens {
         fun updateWarn() {
             if (src == null) return
             val keys = act.keyCache[src.uri]
-            if (keys == null || keys.isEmpty()) {
+            if (keys == null) {
+                warn.text = "キーフレーム未走査"
+                return
+            }
+            if (keys.isEmpty()) {
                 warn.text = ""
                 return
             }
@@ -323,8 +376,9 @@ object Screens {
         })
 
         box.addView(warn)
-        box.addView(Ui.button(act, "キーフレームを調べる") {
+        box.addView(Ui.button(act, "キーフレームを再走査") {
             if (src == null) return@button
+            act.keyCache.remove(src.uri)
             act.toast("走査しています…")
             Thread {
                 val k = act.keyframesOf(src)
@@ -573,6 +627,7 @@ object Screens {
         val p = act.editing ?: return empty(act, "素材タブで編集を開いてください。")
         val c = Ui.col(act, 14)
 
+        if (Bridge.treeUri(act) == null) c.addView(folderCard(act))
         c.addView(act.laneCard(p))
 
         val detail = Ui.card(act)
@@ -825,6 +880,33 @@ object Screens {
             .show()
     }
 
+    /**
+     * 書き出したファイルを読み直して実尺を確かめる。
+     * MediaMuxer は失敗しても例外を投げないことがあるため、
+     * 「できたつもりで壊れている」を検出する唯一の手段になる。
+     */
+    private fun verify(act: MainActivity, p: EditProject, uri: android.net.Uri, status: TextView) {
+        Thread {
+            val probe = Source(uri = uri.toString(), name = "output")
+            Probe.probe(act, probe)
+            act.ui.post {
+                if (probe.probed != 1 || probe.durationMs <= 0) {
+                    status.text = "⚠ 書き出したファイルを読めません。素材のcodecが揃っているか確認してください"
+                    return@post
+                }
+                val want = p.usedMs()
+                val diff = Math.abs(probe.durationMs - want)
+                val ratio = if (want > 0) diff.toFloat() / want else 1f
+                status.text = if (ratio > 0.05f) {
+                    "⚠ 実尺 ${Fmt.ms(probe.durationMs)}（想定 ${Fmt.ms(want)}）ズレています。" +
+                        "キーフレーム吸着の影響か、区間の指定を見直してください"
+                } else {
+                    "完了  実尺 ${Fmt.ms(probe.durationMs)} / ${probe.width}x${probe.height}"
+                }
+            }
+        }.start()
+    }
+
     private fun safeName(p: EditProject): String =
         p.name.replace(Regex("[^\\p{L}\\p{N}_-]"), "").take(16).ifBlank { "cut" }
 
@@ -848,8 +930,9 @@ object Screens {
                 if (err.isBlank()) {
                     p.outputUri = uri.toString()
                     act.store.save()
-                    status.text = "完了"
+                    status.text = "検証しています…"
                     act.toast("書き出しました")
+                    verify(act, p, uri, status)
                 } else {
                     status.text = err
                     act.toast(err)

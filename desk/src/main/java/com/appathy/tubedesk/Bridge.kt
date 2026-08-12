@@ -20,11 +20,35 @@ object Bridge {
         return if (s.isBlank()) null else Uri.parse(s)
     }
 
+    fun setTree(ctx: Context, uri: Uri) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            .edit().putString(KEY_TREE, uri.toString()).apply()
+    }
+
+    /**
+     * 選ばれたフォルダの実パス。表示用。
+     * SAF の tree document id は "primary:Download/tube" の形。
+     */
+    fun treePath(ctx: Context): String? {
+        val tree = treeUri(ctx) ?: return null
+        return try {
+            val id = DocumentsContract.getTreeDocumentId(tree)
+            val i = id.indexOf(':')
+            if (i < 0) return null
+            val vol = id.substring(0, i)
+            val rel = id.substring(i + 1)
+            if (vol != "primary") return null
+            if (rel.isBlank()) "/sdcard" else "/sdcard/" + rel
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
     fun chooseFolder(act: MainActivity) {
         act.pickTree { uri ->
-            act.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-                .edit().putString(KEY_TREE, uri.toString()).apply()
+            setTree(act, uri)
             act.toast("受け渡し先を設定しました")
+            act.refresh()
         }
     }
 

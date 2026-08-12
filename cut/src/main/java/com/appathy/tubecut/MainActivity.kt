@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     /** 素材ごとの RMS。複数素材にまたがる検出のため */
     var rmsBySrc: HashMap<String, FloatArray> = HashMap()
     var keyCache: HashMap<String, LongArray> = HashMap()
+    private val keyScanning = HashSet<String>()
 
     private lateinit var body: FrameLayout
     private lateinit var tabRow: LinearLayout
@@ -179,6 +180,7 @@ class MainActivity : Activity() {
         val c = Ui.col(this, 14)
 
         if (editing == null) {
+            if (Bridge.treeUri(this) == null) c.addView(Screens.folderCard(this))
             c.addView(Ui.button(this, "＋ 新しい編集を作る", true) {
                 val p = EditProject(name = "無題")
                 store.add(p)
@@ -211,20 +213,15 @@ class MainActivity : Activity() {
                 c.addView(card)
             }
             c.addView(Ui.spacer(this, 8))
-            val cfg = Ui.row(this)
-            cfg.addView(Ui.button(this, "受け渡し先フォルダ") {
-                pickTree { uri ->
-                    Bridge.setTree(this, uri)
-                    toast("受け渡し先を設定しました")
-                }
-            })
-            cfg.addView(Ui.button(this, "AI接続先") { askHost() })
-            c.addView(Ui.scrollH(this, cfg))
+            c.addView(Screens.folderCard(this))
+            c.addView(Ui.button(this, "AI接続先") { askHost() })
             c.addView(Ui.spacer(this, 40))
             return Ui.scroll(this, c)
         }
 
         val p = editing!!
+
+        c.addView(Screens.folderCard(this))
 
         val nameEdit = Ui.edit(this, "編集の名前")
         nameEdit.setText(p.name)
@@ -411,6 +408,27 @@ class MainActivity : Activity() {
         cm.setPrimaryClip(ClipData.newPlainText("tubecut", text))
         toast("$note をコピーしました")
     }
+
+    /**
+     * キーフレーム走査を裏で始める。
+     * 区間タブの吸着警告は「調べる」を押さなくても出したいが、
+     * 走査はファイル全体を舐めるので UI を止めない。
+     */
+    fun scanKeyframes(sources: List<Source>, onDone: () -> Unit) {
+        val todo = sources.filter { it.probed == 1 && !keyCache.containsKey(it.uri) && !keyScanning.contains(it.uri) }
+        if (todo.isEmpty()) return
+        todo.forEach { keyScanning.add(it.uri) }
+        Thread {
+            for (s in todo) {
+                val k = Probe.keyframes(this, s)
+                keyCache[s.uri] = k
+                keyScanning.remove(s.uri)
+            }
+            ui.post { onDone() }
+        }.start()
+    }
+
+    fun keyScanBusy(): Boolean = keyScanning.isNotEmpty()
 
     fun keyframesOf(s: Source): LongArray {
         val cached = keyCache[s.uri]
