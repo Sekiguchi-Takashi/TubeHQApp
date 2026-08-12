@@ -57,7 +57,7 @@ object Cmd {
             sb.append(mark())
             sb.append(ff).append(" -ss ").append(sec(s.inMs))
                 .append(" -to ").append(sec(s.outMs))
-                .append(" -i \"").append(src.name).append("\"")
+                .append(" -i \"").append(src.outName()).append("\"")
                 .append(" -c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 128k")
                 .append(" \"").append(part).append("\"\n")
         }

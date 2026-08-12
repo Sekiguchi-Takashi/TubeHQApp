@@ -8,6 +8,8 @@ import java.io.File
 class Source(
     var uri: String = "",
     var name: String = "",
+    var sharedName: String = "",
+    var copied: Int = 0,
     var durationMs: Long = 0,
     var vCodec: String = "",
     var aCodec: String = "",
@@ -23,15 +25,31 @@ class Source(
 
     fun key(): String = "$vCodec|$aCodec|$width|$height|$fps"
 
+    /** Termux から見える名前。コピー時に決まる */
+    fun outName(): String = sharedName.ifBlank { safeName() }
+
+    /** 記号を落とした安全なファイル名。拡張子は残す */
+    fun safeName(): String {
+        val dot = name.lastIndexOf('.')
+        val stem = if (dot > 0) name.substring(0, dot) else name
+        val ext = if (dot > 0) name.substring(dot) else ".mp4"
+        val cleaned = stem.replace(Regex("[^A-Za-z0-9_-]"), "_").trim('_').take(24)
+        return (if (cleaned.isBlank()) "src" else cleaned) + ext.lowercase()
+    }
+
     fun toJson(): JSONObject = JSONObject()
-        .put("uri", uri).put("name", name).put("durationMs", durationMs)
+        .put("uri", uri).put("name", name)
+        .put("sharedName", sharedName).put("copied", copied)
+        .put("durationMs", durationMs)
         .put("vCodec", vCodec).put("aCodec", aCodec)
         .put("width", width).put("height", height).put("fps", fps)
         .put("rotation", rotation).put("probed", probed)
 
     companion object {
         fun from(o: JSONObject) = Source(
-            o.optString("uri"), o.optString("name"), o.optLong("durationMs"),
+            o.optString("uri"), o.optString("name"),
+            o.optString("sharedName"), o.optInt("copied"),
+            o.optLong("durationMs"),
             o.optString("vCodec"), o.optString("aCodec"),
             o.optInt("width"), o.optInt("height"), o.optInt("fps"),
             o.optInt("rotation"), o.optInt("probed")

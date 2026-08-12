@@ -67,6 +67,27 @@ object Bridge {
         return if (s.isBlank()) null else Uri.parse(s)
     }
 
+    /**
+     * 選ばれたフォルダの実パス。Termux に渡すコマンドで使う。
+     * SAF の tree document id は "primary:Download/tube" の形なので、
+     * primary なら /sdcard 配下に読み替えられる。
+     * 外部SDカードなど判別できない場合は null を返す。
+     */
+    fun treePath(ctx: Context): String? {
+        val tree = treeUri(ctx) ?: return null
+        return try {
+            val id = DocumentsContract.getTreeDocumentId(tree)
+            val i = id.indexOf(':')
+            if (i < 0) return null
+            val vol = id.substring(0, i)
+            val rel = id.substring(i + 1)
+            if (vol != "primary") return null
+            if (rel.isBlank()) "/sdcard" else "/sdcard/" + rel
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
     fun setTree(ctx: Context, uri: Uri) {
         ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
             .edit().putString(KEY_TREE, uri.toString()).apply()
@@ -220,6 +241,43 @@ object Bridge {
         } catch (e: Throwable) {
             false
         }
+    }
+
+    /**
+     * 素材を受け渡し先へコピーする。
+     * 重いレーンでは ffmpeg が Termux 側から素材を読むため、
+     * SAF の URI では届かない。実体を共有フォルダに置く必要がある。
+     */
+    fun copyInto(ctx: Context, srcUri: Uri, name: String, mime: String): Long {
+        val tree = treeUri(ctx) ?: return -1L
+        return try {
+            val docId = DocumentsContract.getTreeDocumentId(tree)
+            val dir = DocumentsContract.buildDocumentUriUsingTree(tree, docId)
+            val target = findChild(ctx, tree, name) ?: DocumentsContract.createDocument(
+                ctx.contentResolver, dir, mime, name
+            ) ?: return -1L
+            var total = 0L
+            ctx.contentResolver.openInputStream(srcUri)?.use { input ->
+                ctx.contentResolver.openOutputStream(target, "wt")?.use { out ->
+                    val buf = ByteArray(256 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        out.write(buf, 0, n)
+                        total += n
+                    }
+                    out.flush()
+                }
+            }
+            total
+        } catch (e: Throwable) {
+            -1L
+        }
+    }
+
+    fun exists(ctx: Context, name: String): Boolean {
+        val tree = treeUri(ctx) ?: return false
+        return findChild(ctx, tree, name) != null
     }
 
     fun writeText(ctx: Context, uri: Uri, text: String) {

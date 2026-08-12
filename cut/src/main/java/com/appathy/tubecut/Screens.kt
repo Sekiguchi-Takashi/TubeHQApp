@@ -599,12 +599,94 @@ object Screens {
             })
         } else {
             c.addView(Ui.label(act, "重いレーンの手順", true))
-            c.addView(Ui.label(act, "1. 素材とBGMを受け渡し先フォルダにコピーしておく\n2. スクリプトを書き出す\n3. Termuxでコマンドを貼って実行", true))
+
+            // --- 実行前チェック ---
+            val check = Ui.card(act)
+            val checkText = TextView(act)
+            checkText.setTextColor(Ui.TXT)
+            checkText.textSize = 13f
+            check.addView(checkText)
+
+            fun refreshCheck() {
+                val tree = Bridge.treeUri(act)
+                val hasTree = tree != null
+                // SAF の一覧は重いので1回だけ引いて名前で照合する
+                val names = if (tree == null) setOf()
+                else Bridge.listChildren(act, tree).map { it.second }.toSet()
+                val srcs = p.used().map { it.srcIndex }.distinct().mapNotNull { p.sources.getOrNull(it) }
+                val srcOk = hasTree && srcs.isNotEmpty() && srcs.all { names.contains(it.outName()) }
+                val bgmOk = p.bgmUri.isBlank() || names.contains("bgm.m4a")
+                val telopOk = p.telops.isEmpty() ||
+                    names.contains(String.format("telop_%03d.png", p.telops.size - 1))
+                val scriptOk = names.contains("run_" + p.id + ".sh")
+                fun mk(b: Boolean) = if (b) "✓" else "・"
+                checkText.text = listOf(
+                    mk(hasTree) + " 受け渡し先フォルダ",
+                    mk(srcOk) + " 素材のコピー（" + srcs.size + "件）",
+                    mk(bgmOk) + " BGM",
+                    mk(telopOk) + " テロップPNG（" + p.telops.size + "枚）",
+                    mk(scriptOk) + " スクリプト",
+                    "場所: " + (Bridge.treePath(act) ?: "パスを特定できません（内部ストレージのフォルダを選んでください）")
+                ).joinToString("\n")
+            }
+            refreshCheck()
+            c.addView(check)
+
+            val copyBar = ProgressBar(act, null, android.R.attr.progressBarStyleHorizontal)
+            copyBar.max = 100
+            copyBar.visibility = View.GONE
+            c.addView(copyBar, LinearLayout.LayoutParams(-1, -2))
+            val copyText = Ui.label(act, "", true)
+            c.addView(copyText)
+
+            c.addView(Ui.button(act, "素材を受け渡し先にコピー", true) {
+                if (Bridge.treeUri(act) == null) {
+                    act.toast("先に受け渡し先フォルダを選んでください")
+                } else {
+                    val srcs = p.used().map { it.srcIndex }.distinct()
+                        .mapNotNull { p.sources.getOrNull(it) }
+                    if (srcs.isEmpty()) {
+                        act.toast("採用されている区間がありません")
+                    } else {
+                        copyBar.visibility = View.VISIBLE
+                        copyBar.progress = 0
+                        Thread {
+                            var ok = 0
+                            for ((i, src) in srcs.withIndex()) {
+                                val nm = src.safeName()
+                                act.ui.post {
+                                    copyText.text = (i + 1).toString() + " / " + srcs.size + "  " + nm
+                                    copyBar.progress = i * 100 / srcs.size
+                                }
+                                val n = Bridge.copyInto(act, Uri.parse(src.uri), nm, "video/mp4")
+                                if (n > 0) {
+                                    src.sharedName = nm
+                                    src.copied = 1
+                                    ok++
+                                }
+                            }
+                            if (p.bgmUri.isNotBlank()) {
+                                act.ui.post { copyText.text = "BGM をコピーしています" }
+                                Bridge.copyInto(act, Uri.parse(p.bgmUri), "bgm.m4a", "audio/mp4")
+                            }
+                            act.store.save()
+                            act.ui.post {
+                                copyBar.visibility = View.GONE
+                                copyText.text = ok.toString() + " / " + srcs.size + " 件コピーしました"
+                                refreshCheck()
+                                act.toast("コピーしました")
+                            }
+                        }.start()
+                    }
+                }
+            })
             c.addView(Ui.button(act, "スクリプトを書き出す", true) {
                 val name = "run_${p.id}.sh"
-                val text = Cmd.script(p, "/sdcard/Download/tube", safeName(p) + ".mp4")
+                val dir = Bridge.treePath(act) ?: "/sdcard/Download/tube"
+                val text = Cmd.script(p, dir, safeName(p) + ".mp4")
                 if (Bridge.writeScript(act, name, text)) {
                     act.toast("書き出しました")
+                    refreshCheck()
                 } else {
                     act.createFile(name, "text/plain") { uri ->
                         Bridge.writeText(act, uri, text)
@@ -623,17 +705,26 @@ object Screens {
                     when {
                         n < 0 -> act.toast("先に受け渡し先フォルダを選んでください")
                         n == 0 -> act.toast("書き出せませんでした")
-                        else -> act.toast("${n}枚 書き出しました")
+                        else -> {
+                            act.toast("${n}枚 書き出しました")
+                            refreshCheck()
+                        }
                     }
                 }
             })
             c.addView(Ui.button(act, "コマンドをコピー") {
-                act.copy(Cmd.runLine("/sdcard/Download/tube", "run_${p.id}.sh"), "コマンド")
+                val dir = Bridge.treePath(act) ?: "/sdcard/Download/tube"
+                act.copy(Cmd.runLine(dir, "run_${p.id}.sh"), "コマンド")
             })
             c.addView(Ui.button(act, "スクリプトの中身を見る") {
                 AlertDialog.Builder(act)
                     .setTitle("run_${p.id}.sh")
-                    .setMessage(Cmd.script(p, "/sdcard/Download/tube", safeName(p) + ".mp4"))
+                    .setMessage(
+                        Cmd.script(
+                            p, Bridge.treePath(act) ?: "/sdcard/Download/tube",
+                            safeName(p) + ".mp4"
+                        )
+                    )
                     .setPositiveButton("閉じる", null)
                     .show()
             })
