@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <permission
+        android:name="com.appathy.tube.PLAN_ACCESS"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="com.appathy.tube.PLAN_ACCESS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <queries>
+        <package android:name="com.appathy.tubedesk" />
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:label="TubeCut"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name=".ResultProvider"
+            android:authorities="com.appathy.tubecut.result"
+            android:exported="true"
+            android:permission="com.appathy.tube.PLAN_ACCESS" />
+
+    </application>
+
+</manifest>

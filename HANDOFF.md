@@ -1,104 +1,119 @@
-# TubeHQApp HANDOFF
+# TubeHQApp — 全体HANDOFF
 
-## このリポジトリの構成
-**1リポジトリ・2アプリ**。NovelC/NovelD と同じ「同一リポジトリに複数モジュール」方式。
+YouTube制作を2つのアプリで分担する。リポジトリは1つ。
 
 ```
 TubeHQApp/
-├── app/    TubeHQ    制作パイプライン管理（旧方針・v1.0）
-├── shot/   TubeShot  YouTube風の静止画1枚を作る（新方針・v1.0）
-├── deploy.sh
-├── HANDOFF.md          ← このファイル
-└── SPEC_TubeShot.md    TubeShot の改訂オントロジー
+├── desk/                TubeDesk  動画単品を作ること以外の全部
+│   └── DESK_ONTOLOGY.md
+├── cut/                 TubeCut   動画編集に特化
+│   └── CUT_ONTOLOGY.md
+├── EDIT_PLAN.md         2アプリ間の契約ファイル
+├── SCREENS.md           画面設計＋Appathy共通UI規約
+├── AI_RULES.md          AI推論ルール（他アプリにも流用）
+├── HANDOFF.md           ← このファイル
+└── deploy.sh
 ```
 
-- 2つは **別アプリとして同時にインストールできる**（applicationId が別）
-  - `com.appathy.tubehq` / ラベル TubeHQ
-  - `com.appathy.tubeshot` / ラベル TubeShot
-- `gradle assembleRelease` で両方ビルドされる
-- CI artifact は `TubeHQApp-apk` ひとつ。中に `TubeHQ.apk` と `TubeShot.apk` が入る
-- データは互いに独立（`tubehq.json` / `tubeshot.json`）。現時点で連携なし
+## v3.2 の実装状況（2026-08-12）
 
-### 分けた理由
-旧方針（動画制作の工程管理）と新方針（YouTube風画像の生成）は目的が違うが、
-どちらも「YouTube向けの制作物を作る」点で同じ領域にあり、素材や文言を将来やり取りする余地がある。
-別リポジトリにすると往復が増えるため、同一リポジトリの別モジュールとした。
+| 機能 | 状態 |
+|---|---|
+| Cut: プローブ・レーン判定 | 実装済み |
+| Cut: 無音検出（RMS）・波形 | 実装済み |
+| Cut: 区間リスト・±0.1秒調整・キーフレーム吸着警告 | 実装済み |
+| Cut: MediaMuxer 無劣化カット／結合 | 実装済み |
+| Cut: ffmpeg スクリプト生成 | 実装済み（実行は Termux） |
+| Cut: 重いレーンの進捗表示 | 実装済み（Runner.kt / ファイルポーリング） |
+| Cut: 複数素材にまたがる無音検出 | 実装済み（素材ごとにRMSを保持） |
+| Cut: テロップPNGの自動生成 | 実装済み（TelopDraw.kt / 4様式・全画面キャンバス） |
+| Desk: 台本・カンペ・メタ・実績 | 実装済み |
+| Desk: 静止画レンダラ吸収（4様式・A/B・採用） | 実装済み |
+| 受け渡し（共有フォルダ方式） | 実装済み |
+| 受け渡し（ContentProvider方式） | 実装済み（PlanProvider / ResultProvider・signature権限） |
+| AI推論（Bonsai連携） | 実装済み（AI-01〜06。決定的版が既定、AIは上乗せ） |
+
+### テロップの実装メモ
+`TelopDraw.render` は**動画と同じ解像度の全画面キャンバス**に描き、位置決めもそこで済ませる。
+ffmpeg 側は `overlay=0:0` で乗せるだけ。座標計算を2箇所に分散させないための判断。
+様式は 太 / 細 / 白抜 / 帯 の4種。帯の色は EditProject.accent。
+
+### AI連携のメモ
+`Bonsai.kt` は Desk と Cut の両方に置いてある（内容はタスク定義部分だけ違う）。
+接続先は各アプリの「AI接続先」から設定。既定は `http://127.0.0.1:8080`。
+**BonsaiApp が動いていなくてもアプリは平然と動く。** エラーダイアログは出さない。
+AI_RULES.md の R1〜R5 を崩さないこと。
+
+### 重いレーンの進捗（Runner.kt）
+**ffmpeg のプロセスを直接見に行かない。ファイルだけで完結させる。**
+RUN_COMMAND が使えない環境でも同じように動かすための判断。
+
+スクリプトが受け渡し先に書き出す4ファイルを2秒おきに読む。
+
+| ファイル | 内容 |
+|---|---|
+| `cut_step.txt` | `3/7` 段階。各 ffmpeg の直前に書かれる |
+| `cut_progress.txt` | `ffmpeg -progress` の出力。`out_time_ms` を見る |
+| `cut_done.txt` | 全段階の完了印 |
+| `cut_log.txt` | stderr。エラー時に末尾12行を出す |
+
+割合は「段階の進み」と「段階内の進み」を合成する。
+`Cmd.steps()` と `Runner.percent()` の段階数は**必ず一致させること**。
+90秒動きがなければ警告を出す（ffmpeg が落ちている可能性が高い）。
+
+### 複数素材の無音検出
+`MainActivity.rmsBySrc` に素材ごとの RMS を持つ。
+波形は全素材を連結して表示し、区間は `srcIndex` を持ったまま並ぶ。
+閾値を変えたときに前回の採用状態とラベルを `srcIndex + inMs` で引き継ぐ。
+
+### 次にやること
+1. Desk の実績グラフ化は不要（数値の羅列で足りる、と判断済み）
+2. Cut の縦切り出しプレビュー（現状は枠の数値指定のみ）
+3. APPATHY_LINK.md の連携規約に合わせたカタログ登録（別チャットで策定中）
+
+## 分担の線引き
+
+**動画そのものを触るか否か**で切っている。この一線だけで判断すること。
+
+| | TubeDesk | TubeCut |
+|---|---|---|
+| 扱う対象 | 企画・文字・静止画・数字 | 動画ファイルと時間軸 |
+| 時間軸 | 持たない（想定尺の推定のみ） | 持つ |
+| 主な出力 | 台本・サムネPNG・メタ文言 | EditPlan JSON・ffmpegコマンド |
+| 実行の重さ | 軽い。アプリ内で完結 | 重い。実行はTermuxに投げる |
+
+境界に迷ったときの判定：
+- サムネイル画像 → 動画ではない → **Desk**
+- ショート用の縦切り出し枠の指定 → 動画を切る → **Cut**
+- 切り出した後のサムネ抽出 → 静止画 → **Desk**
+- 想定尺の計算（文字数から） → 文字の話 → **Desk**
+- 実尺の取得（ファイルから） → 動画の話 → **Cut**
+
+## 前身との関係
+
+- 旧 `app/`（TubeHQ）→ `desk/` に改称・再定義
+- 旧 `shot/`（TubeShot）→ 独立アプリとしては畳み、描画エンジンを `desk/` に吸収
+  - 4様式のうち サムネ風・予告風 → サムネイル生成機能
+  - ショート風・プレイヤー風 → 宣伝画像生成機能
 
 ## ビルド構成（Appathy共通）
+
 - AGP 8.5.2 / Kotlin 1.9.24 / Gradle 8.9（Actionsで直接インストール、wrapperなし）
 - minSdk 26 / targetSdk 34 / compileSdk 34 / Java 17
-- 外部依存ゼロ（androidxも不使用、`android.app.Activity` 直系）
+- 外部依存ゼロ。androidx不使用、`android.app.Activity` 直系
 - XMLレイアウトなし。UIは全てKotlinから生成
-- `debug.keystore` をリポジトリ直下に同梱。両モジュールが `file('../debug.keystore')` で参照
+- `debug.keystore` はリポジトリ直下。両モジュールが `file('../debug.keystore')` で参照
+- applicationId: `com.appathy.tubedesk` / `com.appathy.tubecut`（別アプリとして同時インストール可）
+- CI artifact `TubeHQApp-apk` に `TubeDesk.apk` と `TubeCut.apk` の2本
 
----
+## チャット分担（BonsaiApp方式を踏襲）
 
-# app/ — TubeHQ（旧方針）
-
-制作の工程管理。撮影以外をスマホ1台で回すための司令塔。
-
-```
-app/src/main/java/com/appathy/tubehq/
-  MainActivity.kt      タブナビ + ホーム(パイプライン) + ネタ帳
-  Screens.kt           台本 / サムネ / メタデータ
-  PrompterActivity.kt  全画面カンペ（自動スクロール）
-  Yokoku.kt            次回予告フォーマットのサムネ描画
-  Model.kt             Project / Scene / ThumbSpec / Store / Templates
-  Ui.kt                UIヘルパー
-```
-
-- 保存先: `filesDir/tubehq.json`
-- `Project.type`: talk / slide / screen
-- `Project.status`: idea → script → shoot → edit → done
-- `scenes[]`: head / body / note
-- 尺の推定: `Project.CPS = 5.3` 文字/秒。チャプター生成の根拠でもある
-
-### 設計上の伏線（壊さないこと）
-`scenes[]` はそのまま編集指示に変換できる形にしてある。
-将来ffmpeg連携する際は各Sceneに `start` / `duration` / `srcUri` を後付けして concat リストに落とす。
-
-### 未着手（意図的）
-- 動画編集（ffmpeg連携）
-- YouTube投稿（Data API / OAuth）
-- 分析（Analytics API）
-
-**投稿の既知の落とし穴**: 未審査プロジェクトからAPIアップロードした動画は強制的に private になる。
-「API で private 投稿 → Studioアプリで手動公開」が現実解。quota は1日10000、`videos.insert` が1600（1日6本）。
-OAuth は TV/限定入力デバイス用のデバイスコードフローなら外部SDK不要。
-
----
-
-# shot/ — TubeShot（新方針）
-
-YouTube動画に見える**静止画1枚**を作る。動画は作らない。
-元仕様（動画作成ツールのオントロジー）から時間軸と音声を落として畳んだもの。
-**設計の判断根拠は `SPEC_TubeShot.md` を先に読むこと。**
-
-```
-shot/src/main/java/com/appathy/tubeshot/
-  MainActivity.kt  タブナビ + 作品一覧 + 素材/様式/プリセット
-  Screens.kt       文字 / 見た目 / 書き出し
-  Frames.kt        shorts・player・thumb の描画とUI部品（全てPath描画）
-  Yokoku.kt        予告風の描画
-  Model.kt         Shot / Preset / Suggest / Store
-  Ui.kt            UIヘルパー（スライダー・色見本を含む）
-```
-
-- 保存先: `filesDir/tubeshot.json`
-- `Shot` 1件 = 画像1枚。`style` で4様式を切替
-  - shorts 1080×1920 / player 1920×1080 / thumb 1280×720 / yokoku 1280×720
-- 文字は**共通スロット**（title / sub / channel / meta / duration / music / likes / comments）。
-  様式ごとに使うスロットが違うだけ。**ここを様式別に分けないこと**（同じ素材で様式を比較できなくなる）
-- `Frames.render(shot, bg, scale)` が唯一の描画入口。プレビュー 0.42 / 一覧 0.10 / 書き出し 1.0
-- 色補正は ColorMatrix、退色は暖色オーバーレイ、ぼかしは縮小→拡大描画で代用
-
-### 商標
-YouTubeのロゴ・ワードマーク・公式アイコンは**一切描画していない**。
-赤いシークバー、丸ノブ、三角の再生記号といった一般的なUI意匠のみ。この方針を崩さないこと。
-
----
+- `EDIT_PLAN.md` の**所有者は TubeCut 側チャット**。スキーマ変更はそこでのみ行う
+- TubeDesk 側チャットは EDIT_PLAN.md を**読むだけ**。サーバ側にあたる変更を提案しない
+- 新しいチャットは `EDIT_PLAN.md` と該当アプリの ONTOLOGY.md を読むところから始める
 
 ## 実行手順
+
 ```
 cd ~
 cp /sdcard/Download/TubeHQApp_vX.X.zip .
@@ -107,8 +122,10 @@ bash ~/TubeHQApp/deploy.sh "vX.X 要約"
 ```
 
 ## 既知の落とし穴
+
 - ホームディレクトリで `git init` しないこと（GH013 に何度も引っかかっている）
 - push が HTTP 502 で切れても実際は届いていることがある。`git ls-remote origin` で確認する。
   失敗したpushの追跡refが残ると `Everything up-to-date` と誤判定するので、
   その時は `git update-ref -d refs/remotes/origin/main` してから `git fetch --prune`
 - ZIPは毎回ファイル名を変える。展開後のトップレベルは `TubeHQApp` 固定
+- YouTubeのロゴ・ワードマークは描画しない（商標）。一般的なUI意匠のみ

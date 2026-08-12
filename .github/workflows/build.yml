@@ -27,8 +27,8 @@ jobs:
       - name: Collect
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/release/*.apk out/TubeHQ.apk
-          cp shot/build/outputs/apk/release/*.apk out/TubeShot.apk
+          cp desk/build/outputs/apk/release/*.apk out/TubeDesk.apk
+          cp cut/build/outputs/apk/release/*.apk out/TubeCut.apk
 
       - uses: actions/upload-artifact@v4
         with:
