@@ -491,13 +491,64 @@ object Screens {
         vr.addView(Ui.button(act, "する", p.vertical == 1) { p.vertical = 1; act.store.save(); act.refresh() })
         c.addView(vr)
         if (p.vertical == 1) {
+            val src = p.sources.firstOrNull { it.probed == 1 }
+            val sw = src?.width ?: 1920
+            val sh = src?.height ?: 1080
+
+            val cv = CropView(act)
+            cv.srcW = sw
+            cv.srcH = sh
+            cv.crop = p.cropRect(sw, sh)
+            val clp = LinearLayout.LayoutParams(-1, Ui.dp(act, 190))
+            clp.topMargin = Ui.dp(act, 6)
+            clp.bottomMargin = Ui.dp(act, 6)
+            cv.layoutParams = clp
+            c.addView(cv)
+
+            // 抽出フレームは重いので、最初の採用区間から1枚だけ遅延取得する
+            val seg = p.used().firstOrNull()
+            if (src != null && seg != null) {
+                Thread {
+                    val b = Probe.frameAt(act, src.uri, seg.inMs)
+                    if (b != null) act.ui.post {
+                        cv.frame = b
+                        cv.invalidate()
+                    }
+                }.start()
+            }
+
             val pr = Ui.row(act)
-            for ((k, v) in listOf("center" to "中央", "left" to "左", "right" to "右")) {
+            for ((k, v) in listOf("left" to "左", "center" to "中央", "right" to "右")) {
                 pr.addView(Ui.button(act, v, p.verticalPos == k) {
-                    p.verticalPos = k; act.store.save(); act.refresh()
+                    p.verticalPos = k
+                    p.verticalOffset = when (k) {
+                        "left" -> 0
+                        "right" -> 100
+                        else -> 50
+                    }
+                    act.store.save(); act.refresh()
                 })
             }
-            c.addView(pr)
+            c.addView(Ui.scrollH(act, pr))
+
+            c.addView(Ui.stepper(act, "横位置 %", p.verticalOffset, 0, 100, 5) {
+                p.verticalOffset = it
+                p.verticalPos = when (it) {
+                    0 -> "left"
+                    100 -> "right"
+                    50 -> "center"
+                    else -> "custom"
+                }
+                act.store.save()
+                cv.crop = p.cropRect(sw, sh)
+                cv.invalidate()
+            })
+
+            if (src == null) {
+                c.addView(Ui.label(act, "素材が未解析のため 1920×1080 と仮定しています", true))
+            } else if (src.rotation == 90 || src.rotation == 270) {
+                c.addView(Ui.label(act, "⚠ 回転情報が ${src.rotation}° です。実際の切り出し位置がプレビューとずれることがあります", true))
+            }
         }
 
         c.addView(Ui.spacer(act, 10))

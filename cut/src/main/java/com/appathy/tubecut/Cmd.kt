@@ -98,16 +98,12 @@ object Cmd {
             val src = p.sources.firstOrNull { it.probed == 1 }
             val w = src?.width ?: 1920
             val h = src?.height ?: 1080
-            val cropW = Math.min(w, (h * 9 / 16))
-            val x = when (p.verticalPos) {
-                "left" -> "0"
-                "right" -> "${w - cropW}"
-                else -> "${(w - cropW) / 2}"
-            }
+            val r = p.cropRect(w, h)
             sb.append(mark())
             sb.append(ff).append(" -i ").append(cur)
-                .append(" -vf \"crop=").append(cropW).append(":").append(h)
-                .append(":").append(x).append(":0,scale=1080:1920\"")
+                .append(" -vf \"crop=").append(r[2]).append(":").append(r[3])
+                .append(":").append(r[0]).append(":").append(r[1])
+                .append(",scale=1080:1920\"")
                 .append(" -c:v libx264 -preset veryfast -crf 20 -c:a copy vertical.mp4\n\n")
             cur = "vertical.mp4"
         }

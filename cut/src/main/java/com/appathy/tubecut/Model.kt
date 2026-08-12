@@ -101,6 +101,7 @@ class EditProject(
     var loudnorm: Int = 1,
     var vertical: Int = 0,
     var verticalPos: String = "center",
+    var verticalOffset: Int = 50,
     var thresholdDb: Int = -38,
     var minSilenceMs: Int = 600,
     var padHeadMs: Int = 150,
@@ -142,6 +143,17 @@ class EditProject(
         return sb.toString().trim()
     }
 
+    /**
+     * 縦切り出しの枠。9:16 を入る最大で取り、横位置だけ動かす。
+     * プレビューと ffmpeg コマンドで**必ず同じ計算を使う**こと。
+     */
+    fun cropRect(w: Int, h: Int): IntArray {
+        val cw = Math.min(w, h * 9 / 16)
+        val room = Math.max(0, w - cw)
+        val x = (room * verticalOffset / 100).coerceIn(0, room)
+        return intArrayOf(x, 0, cw, h)
+    }
+
     /** 所要時間の見積り（秒） */
     fun estimateSec(): Int =
         if (needsFfmpeg()) Math.max(60, (usedMs() / 1000 * 1.6).toInt())
@@ -158,6 +170,7 @@ class EditProject(
             .put("sources", sa).put("segments", ga).put("telops", ta).put("scenes", ca)
             .put("bgmUri", bgmUri).put("bgmVolume", bgmVolume).put("bgmFadeSec", bgmFadeSec)
             .put("loudnorm", loudnorm).put("vertical", vertical).put("verticalPos", verticalPos)
+            .put("verticalOffset", verticalOffset)
             .put("thresholdDb", thresholdDb).put("minSilenceMs", minSilenceMs)
             .put("padHeadMs", padHeadMs).put("padTailMs", padTailMs)
             .put("accent", accent)
@@ -176,6 +189,7 @@ class EditProject(
             p.loudnorm = o.optInt("loudnorm", 1)
             p.vertical = o.optInt("vertical", 0)
             p.verticalPos = o.optString("verticalPos", "center")
+            p.verticalOffset = o.optInt("verticalOffset", 50)
             p.thresholdDb = o.optInt("thresholdDb", -38)
             p.minSilenceMs = o.optInt("minSilenceMs", 600)
             p.padHeadMs = o.optInt("padHeadMs", 150)
