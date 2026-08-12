@@ -572,7 +572,7 @@ object Screens {
                     when {
                         n < 0 -> act.toast("先に受け渡し先フォルダを選んでください")
                         n == 0 -> act.toast("書き出せませんでした")
-                        else -> act.toast("${'$'}{n}枚 書き出しました")
+                        else -> act.toast("${n}枚 書き出しました")
                     }
                 }
             })

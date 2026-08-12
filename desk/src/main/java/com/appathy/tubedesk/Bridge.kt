@@ -91,7 +91,7 @@ object Bridge {
     fun pullResults(act: MainActivity, verbose: Boolean = false) {
         val viaProvider = pullFromProvider(act)
         if (viaProvider > 0) {
-            act.toast("${'$'}{viaProvider}件 取り込みました")
+            act.toast("${viaProvider}件 取り込みました")
             act.refresh()
             return
         }

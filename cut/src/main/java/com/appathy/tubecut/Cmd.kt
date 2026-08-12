@@ -64,7 +64,7 @@ object Cmd {
         sb.append("\n")
 
         sb.append(mark())
-        sb.append("for f in part_*.mp4; do printf \"file '%s'\\n\" \"$f\" >> concat.txt; done\n")
+        sb.append("for f in part_*.mp4; do printf \"file '%s'\\n\" \"\$f\" >> concat.txt; done\n")
         sb.append(ff).append(" -f concat -safe 0 -i concat.txt -c copy joined.mp4\n\n")
 
         var cur = "joined.mp4"

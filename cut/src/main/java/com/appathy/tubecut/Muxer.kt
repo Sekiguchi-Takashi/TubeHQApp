@@ -26,11 +26,13 @@ object Muxer {
         val segs = proj.used()
         if (segs.isEmpty()) return "区間がありません"
 
-        var pfd = try {
+        val opened = try {
             ctx.contentResolver.openFileDescriptor(outUri, "rw")
         } catch (e: Exception) {
             null
-        } ?: return "出力先を開けません"
+        }
+        if (opened == null) return "出力先を開けません"
+        val pfd = opened
 
         var muxer: MediaMuxer? = null
         val buffer = ByteBuffer.allocate(2 * 1024 * 1024)
