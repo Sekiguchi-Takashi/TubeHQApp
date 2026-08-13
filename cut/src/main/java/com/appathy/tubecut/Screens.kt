@@ -263,6 +263,18 @@ object Screens {
         head.text = "${p.segments.size}区間 / 採用${p.used().size} / ${Fmt.ms(p.usedMs())}"
         c.addView(head)
 
+        if (p.scenes.isNotEmpty()) {
+            val assigned = p.used().count { it.sceneId.isNotBlank() }
+            val at = TextView(act)
+            at.textSize = 13f
+            at.setTextColor(if (assigned > 0) Ui.SUB else Ui.WARN)
+            at.text = if (assigned > 0)
+                "シーン割当 ${assigned} / ${p.used().size} 区間（Deskのチャプターに使われます）"
+            else
+                "⚠ シーンが未割当です。このままDeskに返すとチャプターが実尺になりません"
+            c.addView(at)
+        }
+
         val scanNote = Ui.label(act, "", true)
         c.addView(scanNote)
         val needScan = p.sources.any { it.probed == 1 && !act.keyCache.containsKey(it.uri) }
@@ -421,6 +433,20 @@ object Screens {
         box.addView(Ui.scrollH(act, r))
 
         updateWarn()
+    }
+
+    /** ContentProvider → 共有フォルダ → 手動書き出し の順に試す */
+    private fun sendResult(act: MainActivity, p: EditProject) {
+        if (Bridge.pushResultToProvider(act, p)) {
+            act.toast("Deskに返しました")
+        } else if (Bridge.writeResult(act, p)) {
+            act.toast("受け渡し先に書き出しました")
+        } else {
+            act.createFile("result_${p.workId}.json", "application/json") { uri ->
+                Bridge.writeText(act, uri, Bridge.buildResult(p))
+                act.toast("書き出しました")
+            }
+        }
     }
 
     private fun assignScenes(act: MainActivity, p: EditProject) {
@@ -839,15 +865,24 @@ object Screens {
         c.addView(Ui.button(act, "Deskへ結果を返す") {
             if (p.workId.isBlank()) {
                 act.toast("Deskの台本が読み込まれていません")
-            } else if (Bridge.pushResultToProvider(act, p)) {
-                act.toast("Deskに返しました")
-            } else if (Bridge.writeResult(act, p)) {
-                act.toast("返しました")
+            } else if (p.scenes.isNotEmpty() && p.used().none { it.sceneId.isNotBlank() }) {
+                // 割当を忘れると Desk 側のチャプターが想定尺のまま残る
+                AlertDialog.Builder(act)
+                    .setTitle("シーンが未割当です")
+                    .setMessage(
+                        "区間とDeskのシーンが対応付いていないため、" +
+                            "チャプターが実尺になりません。\n\n" +
+                            "採用区間の先頭から順に自動で割り当てますか。"
+                    )
+                    .setPositiveButton("自動割当して返す") { _, _ ->
+                        assignScenes(act, p)
+                        sendResult(act, p)
+                    }
+                    .setNeutralButton("このまま返す") { _, _ -> sendResult(act, p) }
+                    .setNegativeButton("やめる", null)
+                    .show()
             } else {
-                act.createFile("result_${p.workId}.json", "application/json") { uri ->
-                    Bridge.writeText(act, uri, Bridge.buildResult(p))
-                    act.toast("書き出しました")
-                }
+                sendResult(act, p)
             }
         })
         c.addView(Ui.button(act, "EditPlanを書き出す") {

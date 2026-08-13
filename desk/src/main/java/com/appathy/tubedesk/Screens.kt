@@ -387,6 +387,36 @@ object Screens {
         })
         c.addView(Ui.scrollH(act, actRow))
 
+        c.addView(Ui.label(act, "見比べ", true))
+        val cmp = LinearLayout(act)
+        cmp.orientation = LinearLayout.VERTICAL
+        c.addView(cmp)
+        c.addView(Ui.button(act, "サムネ候補を並べる") {
+            cmp.removeAllViews()
+            val thumbs = p.images.filter { it.role == ImageSpec.ROLE_THUMB }
+            if (thumbs.isEmpty()) {
+                cmp.addView(Ui.label(act, "サムネ役の画像がありません", true))
+            }
+            for ((n, im) in thumbs.withIndex()) {
+                val row = Ui.row(act)
+                row.addView(Ui.label(act, "候補${n + 1}" + (if (im.adopted == 1) " ★採用" else ""), true))
+                row.addView(Ui.button(act, "採用") {
+                    for (o in p.images) if (o.role == im.role) o.adopted = 0
+                    im.adopted = 1
+                    act.store.save(); act.refresh()
+                })
+                cmp.addView(row)
+                val iv = android.widget.ImageView(act)
+                iv.adjustViewBounds = true
+                try {
+                    iv.setImageBitmap(Frames.render(im, act.loadBitmap(im.bg), 0.3f))
+                } catch (e: Throwable) {
+                }
+                cmp.addView(iv, LinearLayout.LayoutParams(-1, -2))
+            }
+        })
+
+        c.addView(Ui.spacer(act, 6))
         val sz = ImageSpec.size(s.style)
         c.addView(Ui.button(act, "PNGで書き出す（${sz.first}×${sz.second}）", true) {
             val base = p.title.ifBlank { "image" }
