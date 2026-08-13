@@ -319,6 +319,15 @@ class MainActivity : Activity() {
                 "\n見積り 約${p.estimateSec() / 60}分${p.estimateSec() % 60}秒"
         }
         card.addView(d)
+
+        if (p.audioMixed()) {
+            val w = TextView(this)
+            w.setTextColor(Ui.WARN)
+            w.textSize = 13f
+            w.text = "⚠ 音声トラックのある素材とない素材が混ざっています。\n" +
+                "そのまま繋ぐと音が欠けます。素材を揃えるか、ffmpeg側で処理してください"
+            card.addView(w)
+        }
         return card
     }
 

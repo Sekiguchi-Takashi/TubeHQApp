@@ -146,6 +146,16 @@ class EditProject(
         return probed.map { it.key() }.distinct().size == 1
     }
 
+    /**
+     * 音声トラックの有無が素材間で食い違うと、
+     * 先頭素材の構成で作ったトラックに書けず無音区間や欠落が起きる。
+     */
+    fun audioMixed(): Boolean {
+        val probed = sources.filter { it.probed == 1 }
+        if (probed.size < 2) return false
+        return probed.map { it.aCodec.isBlank() }.distinct().size > 1
+    }
+
     /** 一致しない項目を名指しする */
     fun mismatch(): String {
         val probed = sources.filter { it.probed == 1 }
