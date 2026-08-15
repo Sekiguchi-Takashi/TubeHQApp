@@ -15,7 +15,7 @@ TubeHQApp/
 └── deploy.sh
 ```
 
-## v3.11 の実装状況（2026-08-13）
+## v3.12 の実装状況（2026-08-15）
 
 | 機能 | 状態 |
 |---|---|
@@ -222,7 +222,11 @@ ContentProvider → 共有フォルダ → 手動書き出し の順に試す。
 - XMLレイアウトなし。UIは全てKotlinから生成
 - `debug.keystore` はリポジトリ直下。両モジュールが `file('../debug.keystore')` で参照
 - applicationId: `com.appathy.tubedesk` / `com.appathy.tubecut`（別アプリとして同時インストール可）
-- CI artifact `TubeHQApp-apk` に `TubeDesk.apk` と `TubeCut.apk` の2本
+- **`build.yml` に `actions/upload-artifact` を入れないこと。**
+  Artifacts のストレージ無料枠（0.5GB）が枯渇し
+  "Artifact storage quota has been hit" でビルドが失敗する。
+  APK は Release から配布するため Artifacts は不要。
+  `build.yml` は**コンパイル確認用**と割り切り、成果物はタグ経由の `release.yml` に任せる
 
 ## チャット分担（BonsaiApp方式を踏襲）
 
@@ -253,6 +257,7 @@ GitHub API で直近リリースのタグを取得して次パッチ版を算出
 - タグを打つと Actions がビルドして Release を作り、自作アプリストアに更新として現れる
 
 ⚠ この構成では push 時に `build.yml`、タグ時に `release.yml` の2つが走る。
+`build.yml` はコンパイルが通るかを見るだけで、成果物は残さない（Artifacts枠の節約）。
 `release.yml` はカタログ側が入れるものでこのZIPには含まれない。
 **2モジュール構成（desk / cut）に対応しているかは要確認。**
 `app/` 単体を前提にしていると Release 側のビルドが空になる。

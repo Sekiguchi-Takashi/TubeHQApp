@@ -24,13 +24,7 @@ jobs:
       - name: Build both APKs
         run: gradle assembleRelease --no-daemon --stacktrace
 
-      - name: Collect
+      - name: Confirm outputs
         run: |
-          mkdir -p out
-          cp desk/build/outputs/apk/release/*.apk out/TubeDesk.apk
-          cp cut/build/outputs/apk/release/*.apk out/TubeCut.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: TubeHQApp-apk
-          path: out/*.apk
+          ls -la desk/build/outputs/apk/release/
+          ls -la cut/build/outputs/apk/release/
