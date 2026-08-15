@@ -15,7 +15,7 @@ TubeHQApp/
 └── deploy.sh
 ```
 
-## v3.10 の実装状況（2026-08-13）
+## v3.11 の実装状況（2026-08-13）
 
 | 機能 | 状態 |
 |---|---|
@@ -238,6 +238,24 @@ cp /sdcard/Download/TubeHQApp_vX.X.zip .
 unzip -o TubeHQApp_vX.X.zip
 bash ~/TubeHQApp/deploy.sh "vX.X 要約"
 ```
+
+### deploy.sh の仕様（Appathy恒久ルール）
+push とタグ発行までを1コマンドで完結させる。REPO は `TubeHQApp`。
+
+`git init -b main`（未初期化時）→ remote 貼り直し → `add -A` → `commit` →
+**`git pull --rebase origin main`** → `push -u origin main` →
+GitHub API で直近リリースのタグを取得して次パッチ版を算出 → `git/refs` にタグを POST
+
+- **`pull --rebase` は必須。** カタログ管理システムが API 経由で
+  `.github/workflows/release.yml` と `ci/appathy.keystore` を直接コミットするため、
+  無いと push が rejected になる
+- **この2ファイルと `ci/` は配布ビルドに必要。削除も追跡解除もしないこと**
+- タグを打つと Actions がビルドして Release を作り、自作アプリストアに更新として現れる
+
+⚠ この構成では push 時に `build.yml`、タグ時に `release.yml` の2つが走る。
+`release.yml` はカタログ側が入れるものでこのZIPには含まれない。
+**2モジュール構成（desk / cut）に対応しているかは要確認。**
+`app/` 単体を前提にしていると Release 側のビルドが空になる。
 
 ## 既知の落とし穴
 

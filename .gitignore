@@ -2,3 +2,6 @@
 build/
 local.properties
 *.iml
+
+# 配布ビルドに必要。カタログ管理システムがAPI経由でコミットする
+# ci/ と .github/workflows/release.yml は絶対に無視・削除しないこと
