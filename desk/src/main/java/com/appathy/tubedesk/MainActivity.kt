@@ -47,6 +47,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = Store(this)
+        Speed.load(this)
+        Channel.load(this)
 
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
@@ -215,11 +217,103 @@ class MainActivity : Activity() {
         tools.addView(Ui.button(this, "読み込み") { importBackup() })
         tools.addView(Ui.button(this, "受け渡し先") { Bridge.chooseFolder(this) })
         tools.addView(Ui.button(this, "設定を確認") { showSettings() })
+        tools.addView(Ui.button(this, "チャンネル") { askChannel() })
         tools.addView(Ui.button(this, "AI接続先") { askHost() })
         tools.addView(Ui.button(this, "Cutの結果を取り込む") { Bridge.pullResults(this, true) })
         c.addView(Ui.scrollH(this, tools))
         c.addView(Ui.spacer(this, 40))
         return Ui.scroll(this, c)
+    }
+
+    /**
+     * 話速の実測。実際に読んで測る以外に正確な値を得る方法がない。
+     * 想定尺とチャプターの精度が全部この係数に乗るので、一度測る価値がある。
+     */
+    fun measureSpeed(text: String) {
+        val body = text.trim()
+        if (body.length < 40) {
+            toast("40字以上の本文がある作品で測ってください")
+            return
+        }
+        val box = Ui.col(this, 16)
+        box.addView(Ui.label(this, "この文を声に出して読んでください", true))
+
+        val tv = TextView(this)
+        tv.text = body.take(200)
+        tv.setTextColor(Ui.TXT)
+        tv.textSize = 17f
+        tv.setLineSpacing(0f, 1.4f)
+        box.addView(tv)
+
+        val result = TextView(this)
+        result.setTextColor(Ui.ACC)
+        result.textSize = 18f
+        result.typeface = Typeface.DEFAULT_BOLD
+        result.text = "現在: " + Speed.label()
+        box.addView(result)
+
+        val used = body.take(200)
+        var startAt = 0L
+        var cps = 0f
+
+        var btn: android.widget.Button? = null
+        btn = Ui.button(this, "読み始める", true) {
+            val b = btn ?: return@button
+            if (startAt == 0L) {
+                startAt = System.currentTimeMillis()
+                b.text = "読み終えた"
+                result.text = "計測中…"
+            } else {
+                val sec = (System.currentTimeMillis() - startAt) / 1000f
+                startAt = 0L
+                b.text = "もう一度測る"
+                if (sec < 3f) {
+                    result.text = "短すぎます。最後まで読んでください"
+                } else {
+                    cps = used.length / sec
+                    result.text = String.format("%.1f 文字/秒（%d字 / %.1f秒）", cps, used.length, sec)
+                }
+            }
+        }
+        box.addView(btn)
+
+        AlertDialog.Builder(this)
+            .setTitle("話速を測る")
+            .setView(Ui.scroll(this, box))
+            .setPositiveButton("この値を使う") { _, _ ->
+                if (cps <= 0f) toast("測定していません")
+                else {
+                    Speed.save(this, cps)
+                    toast("話速を " + Speed.label() + " にしました")
+                    refresh()
+                }
+            }
+            .setNeutralButton("既定に戻す") { _, _ ->
+                Speed.reset(this)
+                toast("既定値に戻しました")
+                refresh()
+            }
+            .setNegativeButton("やめる", null)
+            .show()
+    }
+
+    fun askChannel() {
+        val name = Ui.edit(this, "@channel")
+        name.setText(Channel.name(this))
+        val box = Ui.col(this, 16)
+        box.addView(Ui.label(this, "チャンネル名", true))
+        box.addView(name)
+        box.addView(Ui.label(this, "画像タブとメタタブの初期値に使います", true))
+        AlertDialog.Builder(this)
+            .setTitle("チャンネル設定")
+            .setView(box)
+            .setPositiveButton("保存") { _, _ ->
+                Channel.save(this, name.text.toString())
+                toast("保存しました")
+                refresh()
+            }
+            .setNegativeButton("やめる", null)
+            .show()
     }
 
     private fun showSettings() {
@@ -229,6 +323,10 @@ class MainActivity : Activity() {
             append(if (Bridge.treeUri(this@MainActivity) == null) "未設定" else (path ?: "設定済み（実パス不明）"))
             append("\n\nAI接続先: ")
             append(Bonsai.host(this@MainActivity))
+            append("\n\nチャンネル: ")
+            append(Channel.name(this@MainActivity).ifBlank { "未設定" })
+            append("\n\n話速: ")
+            append(Speed.label())
             append("\n\n作品数: ")
             append(store.projects.size)
         }

@@ -135,11 +135,11 @@ class Project(
 ) {
     fun chars(): Int = scenes.sumOf { it.body.length }
 
-    fun seconds(): Int = Math.max(1, Math.round(chars() / CPS).toInt())
+    fun seconds(): Int = Math.max(1, Math.round(chars() / Speed.cps).toInt())
 
     fun sceneSeconds(s: Scene): Int =
         if (s.realDur > 0) s.realDur
-        else Math.max(3, Math.round(s.body.length / CPS).toInt())
+        else Math.max(3, Math.round(s.body.length / Speed.cps).toInt())
 
     fun hasReal(): Boolean = realTotal > 0
 
@@ -177,7 +177,8 @@ class Project(
         const val S_PUBLISH = "publish"
         const val S_DONE = "done"
 
-        const val CPS = 5.3f
+        /** 既定値。実測で上書きできる（Speed参照） */
+        const val CPS_DEFAULT = 5.3f
 
         val STATUS_ORDER = listOf(S_IDEA, S_SCRIPT, S_SHOOT, S_EDIT, S_PUBLISH, S_DONE)
 
@@ -231,6 +232,77 @@ class Project(
             while (p.thumbs().size < 2) p.images.add(ImageSpec())
             return p
         }
+    }
+}
+
+/**
+ * 話速。文字数から尺を推定する係数（文字/秒）。
+ * 既定 5.3 は日本語の一人喋りの一般値だが、人によって 4.0〜7.0 と幅がある。
+ * カンペで実際に読んで測り直せる。想定尺とチャプターの精度が全部これに乗る。
+ */
+object Speed {
+
+    private const val PREF = "speed"
+    private const val KEY = "cps"
+
+    var cps: Float = Project.CPS_DEFAULT
+        private set
+
+    var measured: Boolean = false
+        private set
+
+    fun load(ctx: Context) {
+        val p = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        val v = p.getFloat(KEY, -1f)
+        if (v > 0f) {
+            cps = v
+            measured = true
+        } else {
+            cps = Project.CPS_DEFAULT
+            measured = false
+        }
+    }
+
+    fun save(ctx: Context, v: Float) {
+        val clamped = v.coerceIn(2.5f, 12f)
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            .edit().putFloat(KEY, clamped).apply()
+        cps = clamped
+        measured = true
+    }
+
+    fun reset(ctx: Context) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().remove(KEY).apply()
+        cps = Project.CPS_DEFAULT
+        measured = false
+    }
+
+    fun label(): String =
+        String.format("%.1f 文字/秒", cps) + (if (measured) "（実測）" else "（既定）")
+}
+
+/** チャンネル名。画像とメタで毎回打ち直す手間を省く */
+object Channel {
+
+    private const val PREF = "channel"
+    private const val KEY = "name"
+
+    private var cached: String = ""
+
+    fun load(ctx: Context) {
+        cached = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY, "") ?: ""
+    }
+
+    fun name(ctx: Context): String {
+        if (cached.isBlank()) load(ctx)
+        return cached
+    }
+
+    fun save(ctx: Context, v: String) {
+        val t = v.trim()
+        val fixed = if (t.isBlank() || t.startsWith("@")) t else "@" + t
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY, fixed).apply()
+        cached = fixed
     }
 }
 

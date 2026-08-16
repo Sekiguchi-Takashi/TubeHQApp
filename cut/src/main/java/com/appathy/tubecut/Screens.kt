@@ -388,6 +388,19 @@ object Screens {
         })
 
         box.addView(warn)
+        var playBtn: android.widget.Button? = null
+        playBtn = Ui.button(act, "この区間を試聴", true) {
+            val b = playBtn ?: return@button
+            if (act.isPlaying()) {
+                act.stopPlay()
+                b.text = "この区間を試聴"
+            } else if (src != null) {
+                b.text = "停止（${Fmt.sec(s.durMs())}）"
+                act.playSegment(src, s) { b.text = "この区間を試聴" }
+            }
+        }
+        box.addView(playBtn)
+
         box.addView(Ui.button(act, "キーフレームを再走査") {
             if (src == null) return@button
             act.keyCache.remove(src.uri)

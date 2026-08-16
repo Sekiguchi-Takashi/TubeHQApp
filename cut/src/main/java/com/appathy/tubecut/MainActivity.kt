@@ -41,6 +41,48 @@ class MainActivity : Activity() {
 
     val ui = Handler(Looper.getMainLooper())
 
+    private var player: android.media.MediaPlayer? = null
+    private var playStop: Runnable? = null
+
+    /**
+     * 区間の試聴。無音カットの当たり外れは音を聞かないと判断できない。
+     * 抽出フレームだけでは「語尾が切れているか」が分からない。
+     */
+    fun playSegment(src: Source, seg: Segment, onEnd: () -> Unit) {
+        stopPlay()
+        try {
+            val mp = android.media.MediaPlayer()
+            mp.setDataSource(this, android.net.Uri.parse(src.uri))
+            mp.prepare()
+            mp.seekTo(seg.inMs.toInt())
+            mp.start()
+            player = mp
+            val dur = Math.max(300L, seg.durMs())
+            val stop = Runnable {
+                stopPlay()
+                onEnd()
+            }
+            playStop = stop
+            ui.postDelayed(stop, dur)
+        } catch (e: Throwable) {
+            toast("再生できません: " + (e.message ?: ""))
+            onEnd()
+        }
+    }
+
+    fun stopPlay() {
+        playStop?.let { ui.removeCallbacks(it) }
+        playStop = null
+        try {
+            player?.stop()
+            player?.release()
+        } catch (e: Throwable) {
+        }
+        player = null
+    }
+
+    fun isPlaying(): Boolean = player != null
+
     var runner: Runner? = null
     private var watchTick: Runnable? = null
 
@@ -80,6 +122,12 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         stopWatch()
+        stopPlay()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopPlay()
     }
 
     private var pickCb: ((Uri) -> Unit)? = null

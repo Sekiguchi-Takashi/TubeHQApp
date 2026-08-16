@@ -132,7 +132,12 @@ object Screens {
         updateMeter()
         c.addView(meter)
 
+        c.addView(Ui.label(act, "話速 " + Speed.label(), true))
+
         val tools = Ui.row(act)
+        tools.addView(Ui.button(act, "話速を測る") {
+            act.measureSpeed(p.scenes.firstOrNull { it.body.length >= 40 }?.body ?: "")
+        })
         tools.addView(Ui.button(act, "テンプレを流し込む") {
             val t = Templates.of(p.type)
             for ((i, s) in t.withIndex()) {
@@ -310,6 +315,7 @@ object Screens {
         val s = spec()
         when (s.style) {
             ImageSpec.SHORTS -> {
+                if (s.channel.isBlank()) s.channel = Channel.name(act)
                 field("画面の文字", "大きな焼き文字（改行可）", { s.title }, { s.title = it }, true)
                 field("チャンネル名", "@channel", { s.channel }, { s.channel = it })
                 field("説明", "下に出る一言", { s.sub }, { s.sub = it }, true)
@@ -318,12 +324,14 @@ object Screens {
                 field("コメント数", "231", { s.comments }, { s.comments = it })
             }
             ImageSpec.PLAYER -> {
+                if (s.channel.isBlank()) s.channel = Channel.name(act)
                 field("タイトル", "動画タイトル", { s.title }, { s.title = it }, true)
                 field("チャンネル名", "@channel", { s.channel }, { s.channel = it })
                 field("再生数・日付", "1.2万回視聴・3日前", { s.meta }, { s.meta = it })
                 field("総再生時間", "8:42", { s.duration }, { s.duration = it })
             }
             ImageSpec.THUMB -> {
+                if (s.channel.isBlank()) s.channel = Channel.name(act)
                 field("テロップ", "大きな文字（改行可）", { s.title }, { s.title = it }, true)
                 field("サブ文字", "アクセント色の一言", { s.sub }, { s.sub = it })
                 field("チャンネル名", "表示名", { s.channel }, { s.channel = it })
@@ -496,7 +504,7 @@ object Screens {
 
         val r1 = Ui.row(act)
         r1.addView(Ui.button(act, "説明文を生成", true) {
-            val d = Suggest.desc(p, titleEdit.text.toString())
+            val d = Suggest.desc(p, titleEdit.text.toString(), null, Channel.name(act))
             descEdit.setText(d); p.metaDesc = d; act.store.save()
         })
         r1.addView(Ui.button(act, "チャプターのみコピー") { act.copy(Suggest.chapters(p), "チャプター") })
@@ -507,7 +515,7 @@ object Screens {
             aiRun(act, b, "冒頭をAIで", { Bonsai.lead(act, titleEdit.text.toString(), body) }) { r ->
                 if (r == null) act.toast("生成できませんでした")
                 else {
-                    val d = Suggest.desc(p, titleEdit.text.toString(), r)
+                    val d = Suggest.desc(p, titleEdit.text.toString(), r, Channel.name(act))
                     descEdit.setText(d)
                     p.metaDesc = d
                     act.store.save()
@@ -656,7 +664,7 @@ object Suggest {
         return sb.toString().trimEnd()
     }
 
-    fun desc(p: Project, title: String, leadOverride: String? = null): String {
+    fun desc(p: Project, title: String, leadOverride: String? = null, channel: String = ""): String {
         val lead = leadOverride
             ?: (p.scenes.firstOrNull { it.body.isNotBlank() }?.body?.take(60) ?: "")
         return buildString {
@@ -666,6 +674,7 @@ object Suggest {
             append(chapters(p)).append("\n\n")
             append("■ 関連動画\n\n")
             append("■ 使用機材・環境\n・スマホ1台\n\n")
+            if (channel.isNotBlank()) append(channel).append("\n\n")
             append("#").append(p.title.replace(" ", "").take(14))
         }
     }
