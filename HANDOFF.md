@@ -15,7 +15,7 @@ TubeHQApp/
 └── deploy.sh
 ```
 
-## v3.13 の実装状況（2026-08-15）
+## v3.14 の実装状況（2026-08-18）
 
 | 機能 | 状態 |
 |---|---|
@@ -244,11 +244,12 @@ ContentProvider → 共有フォルダ → 手動書き出し の順に試す。
 - XMLレイアウトなし。UIは全てKotlinから生成
 - `debug.keystore` はリポジトリ直下。両モジュールが `file('../debug.keystore')` で参照
 - applicationId: `com.appathy.tubedesk` / `com.appathy.tubecut`（別アプリとして同時インストール可）
-- **`build.yml` に `actions/upload-artifact` を入れないこと。**
-  Artifacts のストレージ無料枠（0.5GB）が枯渇し
-  "Artifact storage quota has been hit" でビルドが失敗する。
-  APK は Release から配布するため Artifacts は不要。
-  `build.yml` は**コンパイル確認用**と割り切り、成果物はタグ経由の `release.yml` に任せる
+- **`build.yml` は作らない。** CI はタグ起動の `release.yml` のみ。
+  `release.yml` はカタログ管理システムが API 経由でコミットするもので、このZIPには含まれない
+- **`actions/upload-artifact` は使わない。**
+  Artifacts のストレージ無料枠（0.5GB）が枯渇すると
+  "Artifact storage quota has been hit" で**全ビルドが落ちる**。
+  APK は Release から配布するため Artifacts は不要
 
 ## チャット分担（BonsaiApp方式を踏襲）
 
@@ -268,19 +269,27 @@ bash ~/TubeHQApp/deploy.sh "vX.X 要約"
 ### deploy.sh の仕様（Appathy恒久ルール）
 push とタグ発行までを1コマンドで完結させる。REPO は `TubeHQApp`。
 
-`git init -b main`（未初期化時）→ remote 貼り直し → `add -A` → `commit` →
-**`git pull --rebase origin main`** → `push -u origin main` →
-GitHub API で直近リリースのタグを取得して次パッチ版を算出 → `git/refs` にタグを POST
+`rm -f`（削除対象があれば）→ `git init -b main`（未初期化時）→ remote 貼り直し →
+`add -A` → `commit` → **`git pull --rebase origin main`** → `push -u origin main` →
+`git fetch --tags` → `git tag --list 'v*' | sort -V` の最大値から次タグを算出 →
+`git tag` / `git push origin タグ名`
 
 - **`pull --rebase` は必須。** カタログ管理システムが API 経由で
   `.github/workflows/release.yml` と `ci/appathy.keystore` を直接コミットするため、
   無いと push が rejected になる
 - **この2ファイルと `ci/` は配布ビルドに必要。削除も追跡解除もしないこと**
+- **タグはローカル発行する。** GitHub API の `heads`/`releases` 参照は反映遅延があり、
+  一つ前のコミットにタグが付く事故が起きる
+- 第2引数に `notag` を渡すと push のみでタグを打たない
+- **ファイルを削除する納品では deploy.sh に `rm -f 対象パス` を足す。**
+  `unzip -o` は端末に残った旧ファイルを消さないため、書かないと消えたつもりで残る
 - タグを打つと Actions がビルドして Release を作り、自作アプリストアに更新として現れる
 
-⚠ この構成では push 時に `build.yml`、タグ時に `release.yml` の2つが走る。
-`build.yml` はコンパイルが通るかを見るだけで、成果物は残さない（Artifacts枠の節約）。
-`release.yml` はカタログ側が入れるものでこのZIPには含まれない。
+⚠ v3.14 で `build.yml` を削除した。**push 時のコンパイル確認がなくなった**ので、
+文法エラーはタグを打った後の `release.yml` のビルドで初めて表面化する。
+納品前の静的チェック（括弧の対応、文字列テンプレートの `$` 混入）を怠らないこと。
+
+⚠ `release.yml` はカタログ側が入れるもので、このZIPには含まれない。
 **2モジュール構成（desk / cut）に対応しているかは要確認。**
 `app/` 単体を前提にしていると Release 側のビルドが空になる。
 
